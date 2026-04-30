@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="MedBuddy — Your AI-powered medical assistant. Ask medical questions, upload reports & X-rays, get medicine recommendations and find nearby hospitals." />
+  <meta name="theme-color" content="#0077B6" />
+  <title>MedBuddy — AI Medical Assistant</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Icons (Local) -->
+  <link rel="stylesheet" href="/fa/css/all.min.css" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════
+       SPLASH SCREEN
+  ═══════════════════════════════════════════ -->
+  <div id="splash-screen">
+    <div class="splash-content">
+      <div class="splash-logo">
+        <div class="logo-ring">
+          <div class="logo-cross">
+            <i class="fa-solid fa-cross"></i>
+          </div>
+        </div>
+        <div class="pulse-ring"></div>
+        <div class="pulse-ring delay-1"></div>
+      </div>
+      <h1 class="splash-title">MedBuddy</h1>
+      <p class="splash-subtitle">Your AI Medical Assistant</p>
+      <div class="splash-loader">
+        <div class="loader-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MAIN APP
+  ═══════════════════════════════════════════ -->
+  <div id="app" class="hidden">
+
+    <!-- ── Header ──────────────────────────────── -->
+    <header class="app-header" id="app-header">
+      <div class="header-left">
+        <div class="header-logo">
+          <div class="header-cross"><i class="fa-solid fa-cross"></i></div>
+        </div>
+        <div class="header-text">
+          <span class="header-title">MedBuddy</span>
+          <span class="header-status" id="header-status">
+            <span class="status-dot"></span> AI Online
+          </span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Theme Toggle -->
+        <button class="icon-btn" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle theme">
+          <i class="fa-solid fa-moon" id="theme-icon"></i>
+        </button>
+        <!-- Hospitals Button -->
+        <button class="icon-btn" id="hospitals-btn" title="Find nearby hospitals" aria-label="Find hospitals">
+          <i class="fa-solid fa-hospital"></i>
+        </button>
+        <!-- Clear Chat -->
+        <button class="icon-btn" id="clear-chat-btn" title="Clear conversation" aria-label="Clear chat">
+          <i class="fa-solid fa-broom"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Chat Area ────────────────────────────── -->
+    <main class="chat-area" id="chat-area">
+
+      <!-- Welcome Banner -->
+      <div class="welcome-banner" id="welcome-banner">
+        <div class="welcome-icon">
+          <i class="fa-solid fa-stethoscope"></i>
+        </div>
+        <h2>Hello! I'm MedBuddy 👋</h2>
+        <p>Ask me any medical question, upload a report or X-ray, and I'll help you understand it — in your language.</p>
+
+        <div class="quick-actions">
+          <button class="quick-chip" data-msg="I have a headache and fever. What could it be?">
+            <i class="fa-solid fa-head-side-virus"></i> Headache & Fever
+          </button>
+          <button class="quick-chip" data-msg="What are the symptoms of diabetes?">
+            <i class="fa-solid fa-droplet"></i> Diabetes Symptoms
+          </button>
+          <button class="quick-chip" data-msg="I have chest pain. Should I be worried?">
+            <i class="fa-solid fa-heart-pulse"></i> Chest Pain
+          </button>
+          <button class="quick-chip" data-msg="How do I know if I have high blood pressure?">
+            <i class="fa-solid fa-heart"></i> Blood Pressure
+          </button>
+          <button class="quick-chip" data-msg="What medicines help with common cold?">
+            <i class="fa-solid fa-pills"></i> Common Cold
+          </button>
+          <button class="quick-chip" data-msg="Explain what a CBC blood test means">
+            <i class="fa-solid fa-flask"></i> CBC Blood Test
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Container -->
+      <div class="messages-container" id="messages-container"></div>
+
+      <!-- Typing Indicator -->
+      <div class="typing-indicator hidden" id="typing-indicator">
+        <div class="typing-avatar">
+          <i class="fa-solid fa-cross"></i>
+        </div>
+        <div class="typing-bubble">
+          <div class="typing-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="typing-label">MedBuddy is thinking...</span>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ── File Preview Bar ──────────────────────── -->
+    <div class="file-preview-bar hidden" id="file-preview-bar">
+      <div class="file-preview-content" id="file-preview-content">
+        <!-- Dynamically filled -->
+      </div>
+      <button class="remove-file-btn" id="remove-file-btn" aria-label="Remove file">
+        <i class="fa-solid fa-times"></i>
+      </button>
+    </div>
+
+    <!-- ── Input Area ────────────────────────────── -->
+    <div class="input-area" id="input-area">
+      <div class="input-wrapper">
+        <!-- File Upload -->
+        <button class="attach-btn" id="attach-btn" title="Upload report or X-ray" aria-label="Attach file">
+          <i class="fa-solid fa-paperclip"></i>
+        </button>
+        <input type="file" id="file-input" accept="image/*,.pdf" class="hidden" />
+
+        <!-- Text Input -->
+        <textarea
+          id="message-input"
+          class="message-input"
+          placeholder="Ask a medical question or describe your symptoms..."
+          rows="1"
+          aria-label="Type your message"
+        ></textarea>
+
+        <!-- Send Button -->
+        <button class="send-btn" id="send-btn" aria-label="Send message">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+      <div class="input-disclaimer">
+        <i class="fa-solid fa-shield-halved"></i>
+        MedBuddy is an AI and cannot replace professional medical advice.
+      </div>
+    </div>
+
+  </div><!-- /#app -->
+
+  <!-- ═══════════════════════════════════════════
+       HOSPITALS PANEL (Slide-up sheet)
+  ═══════════════════════════════════════════ -->
+  <div class="panel-overlay hidden" id="hospitals-overlay">
+    <div class="panel-sheet" id="hospitals-panel">
+      <div class="panel-header">
+        <div class="panel-drag-handle"></div>
+        <div class="panel-title-row">
+          <div class="panel-icon"><i class="fa-solid fa-location-dot"></i></div>
+          <div>
+            <h3 class="panel-title">Nearby Hospitals</h3>
+            <p class="panel-subtitle" id="hospitals-subtitle">Finding hospitals near you...</p>
+          </div>
+          <button class="panel-close-btn" id="hospitals-close" aria-label="Close panel">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-body" id="hospitals-list">
+        <!-- Dynamically filled -->
+        <div class="panel-loading" id="hospitals-loading">
+          <div class="panel-spinner"></div>
+          <p>Detecting your location...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TOAST NOTIFICATIONS
+  ═══════════════════════════════════════════ -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
