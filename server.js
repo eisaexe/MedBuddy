@@ -34,29 +34,50 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 // ── System Prompt ────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are MedBuddy, a compassionate, knowledgeable, and friendly AI medical assistant.
+const SYSTEM_PROMPT = `You are Medi Buddy, an AI health assistant. You behave exactly like a doctor doing a triage — you ask short focused questions one at a time before giving any answer.
 
-Your core responsibilities:
-1. Answer medical questions in clear, simple language anyone can understand. Avoid jargon, explain it when used.
-2. CRITICAL: Always respond in the EXACT SAME LANGUAGE the user writes in. Hindi→Hindi, Arabic→Arabic, Tamil→Tamil etc.
-3. Be warm, empathetic, and reassuring — never alarming or dismissive.
-4. Always end with a gentle reminder to consult a real doctor for serious conditions.
-5. Highlight important information by using **bold** text.
+RULES (NEVER break these):
+1. NEVER give medical information, diagnosis, or advice as your first response to any symptom. Always ask a clarifying question first.
+2. Every response that contains a question MUST have exactly 4 options labeled A), B), C), D). No exceptions.
+3. Ask only ONE question per response. Never two.
+4. After the user answers 3 to 4 questions, give a SHORT 2-3 sentence summary + medicine suggestion. Stop there unless asked for more.
+5. Only give more detail if the user says "tell me more" or "explain".
+6. NEVER write "MEDICINES_JSON is not applicable" or "CONDITION_JSON is not applicable". If not needed, do not write them at all.
+7. EMERGENCY ONLY: chest pain + left arm pain, sudden vision loss, or stroke signs → reply ONLY: "🚨 This sounds like a medical emergency. Please call 112 or go to the nearest emergency room RIGHT NOW." Then stop.
+8. Reply in the same language the user used.
 
-FOLLOW-UP QUESTIONS FORMAT:
-When symptoms are vague or you need more context, you MUST ask a follow-up question and provide multiple-choice options for the user to select.
-Include this EXACT format at the end of your response:
-FOLLOWUP_JSON:{"question":"Your clear question here?","options":["Option 1","Option 2","Option 3","Other/Not sure"]}
+EXACT FORMAT FOR EVERY QUESTION RESPONSE:
+[One warm sentence acknowledging the user.]
 
-MEDICINE RECOMMENDATIONS FORMAT:
-When recommending medicines, include at the very end in this EXACT format:
-MEDICINES_JSON:[{"name":"Medicine Name","generic":"Generic Name","use":"What it treats","dosage":"Recommended dosage","type":"tablet/syrup/capsule/cream/etc"}]
+[One focused question?]
 
-CONDITION DETECTION FORMAT:
-When you identify a condition, include:
-CONDITION_JSON:{"condition":"Exact Condition Name","severity":"mild/moderate/severe"}
+A) [option]
+B) [option]
+C) [option]
+D) [option]
 
-Remember: You are NOT a replacement for professional medical advice. Prioritize patient safety above all else.`;
+--- EXAMPLE ---
+User: I have a stomach ache.
+Medi Buddy: I'm sorry to hear that — let me ask you a couple of quick questions so I can help you better.
+
+Where exactly is the pain located?
+
+A) Upper abdomen (just below the chest)
+B) Lower abdomen (below the belly button)
+C) Left side
+D) Right side
+--- END EXAMPLE ---
+
+FINAL SUMMARY FORMAT (after 3-4 answers — SHORT only, no long paragraphs):
+[2-3 sentences describing what is likely going on]
+💊 Likely relief: [1 short practical sentence]
+⚠️ See a doctor if: [1 specific red flag sentence]
+
+_Would you like more details, home care tips, or when to see a doctor?_
+
+[Silently append at the very end with no labels or explanation:]
+MEDICINES_JSON:[{"name":"Med1","generic":"Generic","use":"Use","dosage":"Dose","type":"tablet"},{"name":"Med2","generic":"Generic","use":"Use","dosage":"Dose","type":"tablet"}]
+CONDITION_JSON:{"condition":"ConditionName","severity":"mild/moderate/severe"}`;
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
@@ -66,7 +87,7 @@ app.post('/api/chat', async (req, res) => {
     const response = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-      temperature: 0.7,
+      temperature: 0.3,
       max_tokens: 2048,
     });
     res.json({ content: response.choices[0].message.content });
@@ -125,16 +146,46 @@ app.post('/api/analyze', upload.single('file'), async (req, res) => {
 });
 
 // ── Nearby Hospitals ──────────────────────────────────────────────────────────
+// Helper: POST to Overpass API, tries two mirrors
+function overpassPost(query) {
+  const mirrors = ['overpass-api.de', 'overpass.kumi.systems'];
+  const postData = Buffer.from(query, 'utf8');
+  let attempt = 0;
+
+  function tryNext(resolve, reject) {
+    if (attempt >= mirrors.length) return reject(new Error('All Overpass mirrors failed'));
+    const hostname = mirrors[attempt++];
+    const opts = {
+      hostname, path: '/api/interpreter', method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'Content-Length': postData.length, 'User-Agent': 'MedBuddy/1.0' },
+      timeout: 20000, rejectUnauthorized: false
+    };
+    const r = https.request(opts, res2 => {
+      let body = '';
+      res2.on('data', c => body += c);
+      res2.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch { tryNext(resolve, reject); }
+      });
+    });
+    r.on('error', () => tryNext(resolve, reject));
+    r.on('timeout', () => { r.destroy(); tryNext(resolve, reject); });
+    r.write(postData);
+    r.end();
+  }
+  return new Promise(tryNext);
+}
+
 app.get('/api/hospitals', async (req, res) => {
   try {
     const { lat, lon } = req.query;
     if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required' });
 
     let hospitals = [];
-    const radii = [5000, 10000, 20000]; // Search up to 20km
-    
+    const radii = [5000, 10000, 20000];
+
     for (const radius of radii) {
-      const query = `[out:json][timeout:25];
+      const query = `[out:json][timeout:20];
 (
   node["amenity"="hospital"](around:${radius},${lat},${lon});
   node["amenity"="clinic"](around:${radius},${lat},${lon});
@@ -145,33 +196,7 @@ app.get('/api/hospitals', async (req, res) => {
 );
 out center 20;`;
 
-      const data = await new Promise((resolve, reject) => {
-        const postData = Buffer.from(query, 'utf8');
-        const options = {
-          hostname: 'overpass-api.de',
-          path: '/api/interpreter',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain',
-            'Content-Length': postData.length,
-            'User-Agent': 'MedBuddy/1.0'
-          },
-          timeout: 25000,
-          rejectUnauthorized: false
-        };
-        const r = https.request(options, response => {
-          let body = '';
-          response.on('data', c => body += c);
-          response.on('end', () => {
-            try { resolve(JSON.parse(body)); }
-            catch { reject(new Error('Bad response from hospital API')); }
-          });
-        });
-        r.on('error', reject);
-        r.on('timeout', () => { r.destroy(); reject(new Error('Hospital search timed out')); });
-        r.write(postData);
-        r.end();
-      });
+      const data = await overpassPost(query);
 
       hospitals = data.elements.map(el => {
         const elLat = el.lat || el.center?.lat;
@@ -193,9 +218,7 @@ out center 20;`;
         };
       }).filter(Boolean).sort((a, b) => parseFloat(a.distanceKm) - parseFloat(b.distanceKm)).slice(0, 12);
 
-      if (hospitals.length > 0) {
-        break; // Found some hospitals, stop expanding radius
-      }
+      if (hospitals.length > 0) break;
     }
 
     res.json({ hospitals });

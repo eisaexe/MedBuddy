@@ -175,44 +175,112 @@ async function analyzeFile(file, context) {
   }
 }
 
-// ═══ RENDER AI MESSAGE ═════════════════════════════════════════
+// ═══ RENDER AI MESSAGE ═══════════════════════════════════════════
 function renderAIMessage(raw) {
   let text = raw;
   let medicines = null;
   let condition = null;
-  let followup = null;
+  let abcdOptions = null;
+  const isFinalSummary = text.includes('Symptom Summary:') || text.includes('🔍');
 
-  // Extract FOLLOWUP_JSON
-  const followupMatch = text.match(/FOLLOWUP_JSON:\s*(\{[\s\S]*?\})/);
-  if (followupMatch) {
-    try { followup = JSON.parse(followupMatch[1]); } catch {}
-    text = text.replace(/FOLLOWUP_JSON:\s*\{[\s\S]*?\}/, '').trim();
-  }
-
-  // Extract MEDICINES_JSON
+  // Strip MEDICINES_JSON
   const medMatch = text.match(/MEDICINES_JSON:\s*(\[[\s\S]*?\])/);
   if (medMatch) {
     try { medicines = JSON.parse(medMatch[1]); } catch {}
     text = text.replace(/MEDICINES_JSON:\s*\[[\s\S]*?\]/, '').trim();
   }
 
-  // Extract CONDITION_JSON
+  // Strip CONDITION_JSON
   const condMatch = text.match(/CONDITION_JSON:\s*(\{[\s\S]*?\})/);
   if (condMatch) {
     try { condition = JSON.parse(condMatch[1]); state.lastCondition = condition.condition; } catch {}
     text = text.replace(/CONDITION_JSON:\s*\{[\s\S]*?\}/, '').trim();
   }
 
+  // Strip old FOLLOWUP_JSON (backwards compat)
+  text = text.replace(/FOLLOWUP_JSON:\s*\{[\s\S]*?\}/, '').trim();
+
+  // Clean up any literal "...is not applicable..." lines the model may write
+  text = text.replace(/MEDICINES_JSON\s+is\s+not\s+applicable[^\n]*/gi, '').trim();
+  text = text.replace(/CONDITION_JSON\s+is\s+not\s+applicable[^\n]*/gi, '').trim();
+  text = text.replace(/MEDICINES_JSON:\s*not\s+applicable[^\n]*/gi, '').trim();
+  text = text.replace(/CONDITION_JSON:\s*not\s+applicable[^\n]*/gi, '').trim();
+  // Remove any leftover bare JSON tag labels with no value
+  text = text.replace(/^(MEDICINES_JSON|CONDITION_JSON|FOLLOWUP_JSON)\s*$/gm, '').trim();
+
+  // Detect A) B) C) D) options in plain text
+  if (/^A\)\s*.+/m.test(text)) {
+    const lines = text.split('\n');
+    const opts = [], nonOptLines = [];
+    lines.forEach(line => {
+      const m = line.match(/^([A-D])\)\s*(.+)/);
+      if (m) opts.push({ label: m[1], text: m[2].trim() });
+      else nonOptLines.push(line);
+    });
+    if (opts.length >= 2) {
+      abcdOptions = opts;
+      text = nonOptLines.join('\n').trim();
+    }
+  }
+
   const row = appendMessage('ai', text);
 
-  if (followup) renderFollowUp(row, followup);
+  if (abcdOptions) renderABCDOptions(row, abcdOptions);
   if (condition) renderConditionBanner(row, condition);
   if (medicines && medicines.length > 0) renderMedicineCards(row, medicines);
+  if (isFinalSummary) renderHospitalButton(row);
 
-  scrollToBottom();
+  row.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ═══ RENDER FOLLOW UP ══════════════════════════════════════════
+// ═══ RENDER A/B/C/D OPTIONS ═══════════════════════════════════════
+function renderABCDOptions(row, opts) {
+  const bubble = row.querySelector('.msg-bubble');
+  const card = document.createElement('div');
+  card.className = 'followup-card';
+  card.innerHTML = `<div class="followup-options">${
+    opts.map(o => `<button class="followup-option" data-value="${escHtml(o.label + ') ' + o.text)}">
+      <span class="opt-label">${escHtml(o.label)}</span>
+      <span class="opt-text">${escHtml(o.text)}</span>
+      <i class="fa-solid fa-chevron-right opt-arrow"></i>
+    </button>`).join('')
+  }</div>`;
+
+  card.querySelectorAll('.followup-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Highlight selected, lock all buttons
+      card.querySelectorAll('.followup-option').forEach(b => {
+        b.classList.remove('selected');
+        b.classList.add('disabled');
+      });
+      btn.classList.remove('disabled');
+      btn.classList.add('selected');
+      // Auto-send immediately
+      messageInput.value = btn.dataset.value;
+      handleSend();
+    });
+  });
+
+  bubble.appendChild(card);
+}
+
+// ═══ RENDER HOSPITAL BUTTON (on final summary) ════════════════════
+function renderHospitalButton(row) {
+  const bubble = row.querySelector('.msg-bubble');
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-top:12px;';
+  div.innerHTML = `<button onclick="openHospitals(state.lastCondition)" style="
+    width:100%;padding:12px;border-radius:12px;border:none;cursor:pointer;
+    background:linear-gradient(135deg,#0088CC,#00BFFF);color:#fff;
+    font-weight:700;font-size:0.88rem;display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 4px 12px rgba(0,136,204,0.3);transition:all 0.2s;
+  " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+    <i class="fa-solid fa-hospital"></i> Find Hospitals Near Me
+  </button>`;
+  bubble.appendChild(div);
+}
+
+// ═══ RENDER FOLLOW UP (legacy FOLLOWUP_JSON) ═══════════════════════
 function renderFollowUp(row, followup) {
   const bubble = row.querySelector('.msg-bubble');
   const card = document.createElement('div');
@@ -226,22 +294,14 @@ function renderFollowUp(row, followup) {
       ${followup.options.map(opt => `<button class="followup-option">${escHtml(opt)}</button>`).join('')}
     </div>
   `;
-  
-  // Add click listeners to options
-  const buttons = card.querySelectorAll('.followup-option');
-  buttons.forEach(btn => {
+  card.querySelectorAll('.followup-option').forEach(btn => {
     btn.addEventListener('click', () => {
-      // Disable all buttons
-      buttons.forEach(b => b.classList.add('disabled'));
-      btn.classList.remove('disabled');
+      card.querySelectorAll('.followup-option').forEach(b => b.classList.remove('selected', 'disabled'));
       btn.classList.add('selected');
-      
-      // Send the selected option as a message
       messageInput.value = btn.textContent;
-      handleSend();
+      messageInput.focus();
     });
   });
-
   bubble.appendChild(card);
 }
 
@@ -296,7 +356,7 @@ function appendMessage(role, text, isError = false, file = null) {
   row.className = `message-row ${isAI ? 'ai' : 'user'}`;
 
   const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const avatarIcon = isAI ? '<i class="fa-solid fa-cross"></i>' : '<i class="fa-solid fa-user"></i>';
+  const avatarIcon = isAI ? '<i class="fa-solid fa-stethoscope"></i>' : '<i class="fa-solid fa-user"></i>';
 
   let fileHtml = '';
   if (file) {
@@ -317,7 +377,10 @@ function appendMessage(role, text, isError = false, file = null) {
     </div>`;
 
   messagesContainer.appendChild(row);
-  scrollToBottom();
+  
+  if (!isAI) {
+    scrollToBottom();
+  }
   return row;
 }
 

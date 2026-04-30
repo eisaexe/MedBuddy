@@ -209,6 +209,38 @@ input,textarea{outline:none;border:none}
   pointer-events: none;
   border-color: var(--border);
 }
+.opt-label {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(0,136,204,0.12);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+.followup-option:hover .opt-label,
+.followup-option.selected .opt-label {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+.opt-text {
+  flex: 1;
+}
+.opt-arrow {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  transition: var(--transition);
+}
+.followup-option:hover .opt-arrow,
+.followup-option.selected .opt-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
 
 /* ═══ TYPING INDICATOR ════════════════════════════════════════ */
 .typing-indicator{display:flex;gap:8px;align-items:flex-end;padding:4px 0;animation:fade-up 0.3s ease}
