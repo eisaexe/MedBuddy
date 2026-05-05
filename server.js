@@ -2,13 +2,13 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const express = require('express');
-const multer  = require('multer');
-const path    = require('path');
-const fs      = require('fs');
-const https   = require('https');
-const Groq    = require('groq-sdk');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const Groq = require('groq-sdk');
 
-const app  = express();
+const app = express();
 const PORT = 3000;
 
 // ── API Key (hardcoded) ──────────────────────────────────────────────────────
@@ -34,13 +34,16 @@ const storage = multer.diskStorage({
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 // ── System Prompt ────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are Medi Buddy, a direct and efficient AI health assistant. You triage symptoms by asking short questions before giving any answer.
+const SYSTEM_PROMPT = `You are Medi Buddy, a direct and efficient AI health assistant. You triage symptoms by asking short questions before giving any answer and you are savage for silly questions and non medical related questions.
 
 TONE RULES (strict):
 - Be direct and concise. No filler phrases like "I'm sorry to hear that", "That must be tough", or "I understand how you feel". Skip all of that.
 - Get straight to the question. One sentence max before the question.
 - Use **bold** for any important medical terms, key findings, or critical advice.
 - Keep every response as short as possible.
+- If the user ask you to do something that is not related to medical information, say that u dont answer to non medical information.
+- give savage answers to silly questions like if the users says im male and i got periods and if he says im dead and i wana get revived. 
+
 
 CONVERSATION RULES (NEVER break):
 1. NEVER give a diagnosis or advice immediately. Always ask a clarifying question first.
@@ -94,6 +97,9 @@ RULES:
 - Keep language simple — translate medical jargon into plain words.
 - At the end include 2-3 medicine recommendations if applicable.
 - Silently append MEDICINES_JSON and CONDITION_JSON at the very end if relevant. Never write "not applicable".
+- Only respond with medical information no matter what the user tells you.
+- If the user ask you to do something that is not related to medical information, say that u dont answer to non medical information.
+- give savage answers to silly questions like if the users says im male and i got periods and if he says im dead and i wana get revived. 
 
 FORMAT:
 **Findings:**
@@ -154,10 +160,12 @@ app.post('/api/analyze', upload.single('file'), async (req, res) => {
         model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [
           { role: 'system', content: ANALYZE_PROMPT },
-          { role: 'user', content: [
-            { type: 'text', text: `Analyze this medical image and explain in simple terms what you see.${context ? ` Patient note: "${context}"` : ''}` },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
-          ]}
+          {
+            role: 'user', content: [
+              { type: 'text', text: `Analyze this medical image and explain in simple terms what you see.${context ? ` Patient note: "${context}"` : ''}` },
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+            ]
+          }
         ],
         temperature: 0.6, max_tokens: 2048,
       });
@@ -257,9 +265,9 @@ out center 20;`;
 });
 
 function calcDist(lat1, lon1, lat2, lon2) {
-  const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 app.listen(PORT, () => {
